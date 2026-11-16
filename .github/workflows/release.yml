@@ -1,10 +1,17 @@
 # Creates a GitHub Release, with the installable .tgz, whenever a version tag lands here.
 # Tags are pushed by the maintainer's publish workflow; this repo is generated, so don't edit it by hand.
+# Missed one? Actions → Release → Run workflow, with the tag (e.g. v0.2.9).
 name: Release
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to release (e.g. v0.2.9)
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -12,24 +19,32 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Package the app
         run: |
           mkdir pkg
           cp -R README.md package.json default static pkg/
-          tar -czf "pulse-${GITHUB_REF_NAME#v}.tgz" -C pkg .
+          tar -czf "pulse-${TAG#v}.tgz" -C pkg .
 
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — nothing to do"
+            exit 0
+          fi
           cat > notes.md <<EOF
           ## Install
 
           - **From Git:** in Cribl, go to **App Platform → Add App → Import from Git** and use \`${{ github.server_url }}/${{ github.repository }}\`.
-          - **From file:** download \`pulse-${GITHUB_REF_NAME#v}.tgz\` below and upload it in **App Platform → Add App**.
+          - **From file:** download \`pulse-${TAG#v}.tgz\` below and upload it in **App Platform → Add App**.
           EOF
-          gh release create "$GITHUB_REF_NAME" "pulse-${GITHUB_REF_NAME#v}.tgz" \
-            --verify-tag --title "Pulse $GITHUB_REF_NAME" --notes-file notes.md
+          gh release create "$TAG" "pulse-${TAG#v}.tgz" \
+            --verify-tag --title "Pulse $TAG" --notes-file notes.md
