@@ -1,0 +1,21 @@
+{
+  "name": "pulse",
+  "version": "0.2.8",
+  "displayName": "Pulse",
+  "description": "Pulse watches every Cribl source per sender: it learns who should be sending, names senders even when the host field is missing, and alerts when one goes silent, arrives late or drops in volume.",
+  "author": "Simon Duchene",
+  "license": "Apache-2.0",
+  "minLogStreamVersion": "4.20.0",
+  "cribl": {
+    "type": "app",
+    "appAuthMode": "policiesOnly",
+    "createAppScriptVersion": "1.3.0"
+  },
+  "tags": {
+    "product": [
+      "stream",
+      "search",
+      "lake"
+    ]
+  }
+}

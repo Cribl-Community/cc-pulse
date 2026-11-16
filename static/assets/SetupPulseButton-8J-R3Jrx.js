@@ -1,0 +1,1 @@
+import{Bt as e,Sn as t,o as n}from"./index-cUue2AHr.js";var r=n();function i(){let n=t();return(0,r.jsx)(e,{variant:`primary`,onClick:()=>n(`/settings/deploy`),children:`Set up Pulse`})}export{i as t};
