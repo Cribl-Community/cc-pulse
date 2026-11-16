@@ -1,0 +1,35 @@
+# Creates a GitHub Release, with the installable .tgz, whenever a version tag lands here.
+# Tags are pushed by the maintainer's publish workflow; this repo is generated, so don't edit it by hand.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Package the app
+        run: |
+          mkdir pkg
+          cp -R README.md package.json default static pkg/
+          tar -czf "pulse-${GITHUB_REF_NAME#v}.tgz" -C pkg .
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<EOF
+          ## Install
+
+          - **From Git:** in Cribl, go to **App Platform → Add App → Import from Git** and use \`${{ github.server_url }}/${{ github.repository }}\`.
+          - **From file:** download \`pulse-${GITHUB_REF_NAME#v}.tgz\` below and upload it in **App Platform → Add App**.
+          EOF
+          gh release create "$GITHUB_REF_NAME" "pulse-${GITHUB_REF_NAME#v}.tgz" \
+            --verify-tag --title "Pulse $GITHUB_REF_NAME" --notes-file notes.md

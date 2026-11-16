@@ -1,6 +1,6 @@
 {
   "name": "pulse",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "displayName": "Pulse",
   "description": "Pulse watches every Cribl source per sender: it learns who should be sending, names senders even when the host field is missing, and alerts when one goes silent, arrives late or drops in volume.",
   "author": "Simon Duchene",
