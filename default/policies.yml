@@ -1,0 +1,56 @@
+# Every Cribl product API path Pulse calls (policiesOnly / Strict mode).
+policies:
+  - { object: '/system/info', actions: ['GET'] }
+  - { object: '/master/groups', actions: ['GET'] }
+  - { object: '/master/groups/*', actions: ['GET', 'PATCH'] }        # PATCH .../deploy
+  - { object: '/version/commit', actions: ['POST'] }
+  - { object: '/m/*/system/inputs', actions: ['GET'] }
+  # Spec 016: in Strict mode a list only returns the items whose child path is granted too — without this the
+  # Deploy page lists no sources ("0/0 selected"). GET only.
+  - { object: '/m/*/system/inputs/*', actions: ['GET'] }
+  - { object: '/m/*/system/outputs', actions: ['GET', 'POST'] }
+  - { object: '/m/*/system/outputs/*', actions: ['GET', 'PATCH'] }
+  - { object: '/m/*/routes/*', actions: ['GET', 'PATCH'] }
+  - { object: '/m/*/packs', actions: ['GET', 'POST', 'PUT'] }
+  - { object: '/m/*/packs/*', actions: ['GET', 'PATCH'] }
+  - { object: '/m/*/p/*', actions: ['GET', 'PATCH'] }               # pack vars
+  # Spec 031: per-segment matching of `/m/*/p/*` is not verified — explicit GETs for pack inputs and routes.
+  - { object: '/m/*/p/*/system/inputs', actions: ['GET'] }
+  - { object: '/m/*/p/*/routes', actions: ['GET'] }
+  # Spec 016 again: a pack's lists come back empty in Strict mode unless each item's child path is granted. GET only.
+  - { object: '/m/*/p/*/system/inputs/*', actions: ['GET'] }
+  - { object: '/m/*/p/*/routes/*', actions: ['GET'] }
+  - { object: '/products/lake/lakes/default/datasets', actions: ['GET', 'POST'] }
+  # Spec 016: same reason — without it every dataset looks missing ("will be created") and its format unknown.
+  # GET only: the app never edits or deletes a Lake dataset.
+  - { object: '/products/lake/lakes/default/datasets/*', actions: ['GET'] }
+  # Search only lets a policiesOnly app read a dataset if it is listed here BY NAME (no wildcard) —
+  # otherwise jobs fail with 500 "All the datasets addressed in this query are disallowed by permissions".
+  # Policies are app-wide: anyone the app is shared with can read these datasets through Pulse.
+  # A custom dataset chosen on the Deploy page must be added here too, with its <dataset>_5m rollup (then re-package / upgrade the app).
+  - { object: '/m/default_search/search/datasets/pulse_metrics', actions: ['GET'] }
+  # Spec 015: the Parquet dataset an existing JSON install moves to (a format is never changed in place, CRIBL-37604).
+  - { object: '/m/default_search/search/datasets/pulse_metrics_pq', actions: ['GET'] }
+  # Spec 026: the 5-minute rollup datasets (<dataset>_5m) — a custom dataset needs its own _5m grant too.
+  - { object: '/m/default_search/search/datasets/pulse_metrics_5m', actions: ['GET'] }
+  - { object: '/m/default_search/search/datasets/pulse_metrics_pq_5m', actions: ['GET'] }
+  # Spec 026: pulse_rollup and its backfill end in `| export to lake <dataset>_5m`. Search's export operator checks this
+  # runtime permission first (it is what the built-in Search Runtime Maintainer role grants); without it a policiesOnly
+  # app gets 400 "Not allowed to export data to lake dataset '<dataset>_5m'". The only other way in is '*' on the
+  # target dataset, which would also let the app edit or delete that dataset's definition.
+  - { object: '/m/default_search/search/srr/exportToLake', actions: ['GET'] }
+  # Measured cost line (Alerts → Search load): reads the jobs list, read-only.
+  - { object: '/m/default_search/search/jobs', actions: ['GET'] }
+  - { object: '/m/default_search/search/jobs', actions: ['POST'] }
+  - { object: '/m/default_search/search/jobs/*', actions: ['GET', 'POST'] }
+  - { object: '/m/default_search/search/datasets/$vt_results', actions: ['GET'] }
+  - { object: '/m/default_search/search/saved', actions: ['GET', 'POST'] }
+  - { object: '/m/default_search/search/saved/*', actions: ['GET', 'PATCH'] }
+  - { object: '/m/default_search/notifications', actions: ['GET', 'POST'] }
+  - { object: '/m/default_search/notifications/*', actions: ['GET', 'PATCH'] }
+  - { object: '/m/default_search/system/lookups', actions: ['GET', 'POST', 'PUT'] }
+  - { object: '/m/default_search/system/lookups/*', actions: ['GET', 'PATCH'] }
+  # D2 allows create only: POST on the collection, never PATCH/PUT/DELETE on a target.
+  - { object: '/notification-targets', actions: ['GET', 'POST'] }
+  - { object: '/notification-targets/*', actions: ['GET'] }       # spec 016: the list is empty without it
+  - { object: '/ai/q/agents/open_investigator', actions: ['POST'] }  # Cribl AI (org AI Settings)
