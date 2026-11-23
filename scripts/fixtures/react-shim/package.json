@@ -1,0 +1,1 @@
+{ "name": "react-shim", "private": true, "type": "module", "main": "./index.mjs", "exports": { ".": "./index.mjs", "./jsx-runtime": "./jsx-runtime.mjs" } }

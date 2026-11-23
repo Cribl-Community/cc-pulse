@@ -1,0 +1,16 @@
+{
+  "name": "cribl-pulse",
+  "version": "1.3.0",
+  "description": "Pulse: per-source, per-asset 60s heartbeat metric (pulse.heartbeat) for missing-asset detection",
+  "author": "Simon Duchene",
+  "license": "Apache-2.0",
+  "keywords": [
+    "monitoring",
+    "heartbeat",
+    "missing host",
+    "data completeness"
+  ],
+  "engines": {
+    "cribl": ">=4.12.0"
+  }
+}

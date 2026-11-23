@@ -1,0 +1,16 @@
+id: default
+groups: {}
+comments: []
+routes:
+  - id: pulse_heartbeat
+    name: pulse heartbeat
+    final: true
+    disabled: false
+    pipeline: pulse_heartbeat
+    description: Heartbeat metric per (input, asset)
+    enableOutputExpression: false
+    outputExpression: null
+    filter: "true"
+    clones: []
+    targetContext: group
+    output: __group

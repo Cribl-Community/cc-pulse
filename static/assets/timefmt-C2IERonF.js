@@ -1,1 +1,0 @@
-var e=e=>e===`utc`?`UTC`:void 0,t=(t,n,r)=>new Date(t*1e3).toLocaleString([],{...r,timeZone:e(n)}),n=(e,n)=>e?t(e,n,{hour:`2-digit`,minute:`2-digit`}):`—`,r=(e,n)=>t(e,n,{hour:`2-digit`}),i=(e,n)=>t(e,n,{weekday:`long`,day:`numeric`,month:`long`});export{i as n,r,n as t};

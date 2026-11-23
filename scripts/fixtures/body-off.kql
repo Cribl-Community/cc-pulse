@@ -1,0 +1,35 @@
+dataset="pulse_metrics" _metric=="pulse.heartbeat"
+| extend minute = bin(_time, 60)
+| summarize first_seen=min(_time), last_seen=max(_time), active_min=dcount(minute),
+            events=sum(_value), bytes=sum(bytes), max_lag_s=max(event_lag_s), min_lag_s=min(event_lag_s),
+            lag_now_s=maxif(event_lag_s, _time > now() - 900), events_1h=sumif(_value, _time > now() - 3600),
+            key_src=max(asset_src)
+          by worker_group, input, asset
+| extend silent_raw = now() - last_seen - 60
+| extend silent_s = iff(silent_raw < 0, 0.0, silent_raw)
+| extend span_min = max_of(1, (last_seen - first_seen) / 60 + 1)
+| extend expected_gap_s = round(60 * span_min / active_min, 0)
+| extend vol_ratio = iff(span_min >= 180 and events > 0, round(events_1h * span_min / (60.0 * events), 2), 1.0)
+| lookup pulse_overrides on input, asset
+| extend ov_on = isnotnull(action) and action != "none" and (isnull(until_s) or todouble(until_s) <= 0 or todouble(until_s) > now())
+| extend tolerance_s = iff(ov_on and action == "threshold" and todouble(max_gap_s) > 0, todouble(max_gap_s), max_of(300, min_of(3 * expected_gap_s, 14400)))
+| lookup pulse_assets on asset
+| extend mw_key = "*"
+| lookup pulse_maintenance on mw_key
+| extend mw_all = iff(isnotnull(mw_start) and now() >= todouble(mw_start) and now() < todouble(mw_end), coalesce(mw_reason, "maintenance"), "")
+| project-away mw_start, mw_end, mw_reason
+| extend mw_key = strcat("g:", worker_group)
+| lookup pulse_maintenance on mw_key
+| extend mw_grp = iff(isnotnull(mw_start) and now() >= todouble(mw_start) and now() < todouble(mw_end), coalesce(mw_reason, "maintenance"), "")
+| project-away mw_start, mw_end, mw_reason
+| extend mw_key = strcat("i:", worker_group, "|", input)
+| lookup pulse_maintenance on mw_key
+| extend mw_src = iff(isnotnull(mw_start) and now() >= todouble(mw_start) and now() < todouble(mw_end), coalesce(mw_reason, "maintenance"), "")
+| project-away mw_start, mw_end, mw_reason
+| extend maintenance = case(mw_src != "", mw_src, mw_grp != "", mw_grp, mw_all)
+| extend raw_state = case(active_min < 10, "learning", silent_s > tolerance_s, "missing", silent_s > 0.6 * tolerance_s, "late", "ok")
+| extend signal = case(min_lag_s < -300, "clock_skew", lag_now_s > 900, "delayed", raw_state == "ok" and vol_ratio < 0.3, "low_volume", "")
+| extend state = case(maintenance != "", "maintenance", ov_on and action == "mute", "muted",
+                      ov_on and action == "ack" and raw_state in ("missing", "late") and last_seen <= todouble(ack_seen) + 1, "acked",
+                      raw_state == "ok" and signal == "delayed", "delayed", raw_state)
+| extend newly_missing = state == "missing" and silent_s > tolerance_s + 0 and silent_s <= tolerance_s + 0 + 360

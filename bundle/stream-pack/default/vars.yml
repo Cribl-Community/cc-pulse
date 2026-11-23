@@ -1,0 +1,42 @@
+PULSE_WORKER_GROUP:
+  type: string
+  lib: custom
+  label: "Worker Group name"
+  value: "'default'"
+  description: "Stamped as worker_group on every heartbeat (set by the Pulse app at deploy)"
+  tags: pulse
+PULSE_KEYS:
+  type: object
+  lib: custom
+  label: "Asset key per source"
+  value: "{}"
+  description: "Map of input id (type:id, or just id) to a key spec such as syslog, csv:2, kv:devname, field:host.name or 'kv:devname | ip'. Sources not listed use auto. Set by the Pulse app (Identity page)."
+  tags: pulse
+PULSE_WEAK_HOSTS:
+  type: array
+  lib: custom
+  label: "Placeholder host values"
+  value: "[\"localhost\",\"localhost.localdomain\",\"127.0.0.1\",\"::1\",\"unknown\",\"-\",\"none\",\"null\",\"undefined\"]"
+  description: "Host values that identify nothing; the resolver skips them and tries the next rule. Values must be lowercase (the app lowercases on save; the resolver only lowercases the candidate value, not this list)"
+  tags: pulse
+PULSE_ASSET_CASE:
+  type: string
+  lib: custom
+  label: "Asset name normalization"
+  value: "'keep'"
+  description: "keep = as received, lower = lowercase, short = lowercase without the domain (WEB01.corp.local -> web01)"
+  tags: pulse
+PULSE_SOURCE_LABEL:
+  type: string
+  lib: custom
+  label: "Source-level asset label"
+  value: "'(source)'"
+  description: "Asset name used when no rule identifies a sender; the source is then watched as a single entity"
+  tags: pulse
+PULSE_SAMPLE:
+  type: boolean
+  lib: custom
+  label: "Send samples to the Key Advisor"
+  value: "true"
+  description: "Send 3 truncated events per source every 15 minutes to the Pulse dataset so the app can suggest an asset key"
+  tags: pulse

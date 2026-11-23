@@ -1,0 +1,200 @@
+output: default
+streamtags: []
+groups: {}
+asyncFuncTimeout: 1000
+description: Per (input, asset) 60s heartbeat as metric events. The asset is resolved even when the host field is missing or useless. Samples for the Key Advisor ride on 3 heartbeats per input per 15 min (no second clone).
+functions:
+  - id: comment
+    filter: "true"
+    conf:
+      comment: |
+        pulse_heartbeat v1.3 (spec 012). 1 event per (input, asset) per 60 s becomes metric pulse.heartbeat
+        (_value=events, bytes, event_lag_s; dims worker_group, input, asset, asset_src, worker).
+        Asset = C.vars.PULSE_KEYS[input] key spec, else auto (host, host fields, syslog header, devname, IP).
+        Key specs and fallbacks: see the pack README.
+        Samples for the Key Advisor (raw_sample, fields_json, src_ip) ride on the first 3 heartbeats per
+        input per 15 min, instead of a second pulse_sample route that cloned every event (spec 012 / spike 011).
+  - id: code
+    filter: "true"
+    description: "Resolve the asset (__pa) and how it was found (__pas). Must stay in sync with src/lib/identity.ts"
+    conf:
+      maxNumOfIterations: 5000
+      activeLogSampleRate: 1000
+      useUniqueLogChannel: true
+      code: |
+        // Faster resolver (spec 011): fast path for spec auto + usable host; weak-host list
+        // scanned in place (no per-event map()/toLowerCase() of all entries, PULSE_WEAK_HOSTS
+        // ships lowercase); input id is split only when PULSE_KEYS misses on the full id;
+        // regexes for kv: are compiled only when that rule is reached.
+        const S = String;
+        const weak = C.vars.PULSE_WEAK_HOSTS || [];
+        const isWeak = (t) => { const l = t.toLowerCase(); for (let i = 0; i < weak.length; i++) if (weak[i] === l) return true; return false; };
+        const good = (v) => {
+          if (v === undefined || v === null || typeof v === 'object') return '';
+          const t = typeof v === 'string' ? v.trim() : S(v).trim();
+          return t && t.length <= 253 && !isWeak(t) ? t : '';
+        };
+        const id = S(__e.__inputId || '');
+        const keys = C.vars.PULSE_KEYS || {};
+        let spec = keys[id];
+        if (spec === undefined) {
+          let any = false; for (const k in keys) { any = true; break; }
+          if (!any) spec = 'auto';
+          else { const parts = id.split(':'); spec = keys[parts.slice(0, 2).join(':')] || keys[parts[1] || ''] || 'auto'; }
+        }
+        spec = S(spec);
+        let asset = '', src = 'none';
+        const h = spec === 'auto' ? good(__e.host) : '';
+        if (h) { asset = h; src = 'host'; }
+        else {
+          const raw = typeof __e._raw === 'string' ? __e._raw : '';
+          const dig = (o, p) => p.indexOf('.') < 0 ? o[p] : p.split('.').reduce((a, k) => (a === undefined || a === null ? undefined : a[k]), o);
+          let parsed;
+          const one = (s) => {
+            if (s === 'host') return good(__e.host);
+            if (s === 'ip') return good(__e.__srcIpPort ? S(__e.__srcIpPort).replace(/^\[/, '').replace(/\]?:\d+$/, '') : '');
+            if (s === 'source') return good(__e.source);
+            if (s === 'syslog') {
+              const m = raw.match(/^<\d{1,3}>1 \S+ (\S+) /) || raw.match(/^(?:<\d{1,3}>)?[A-Z][a-z]{2} +\d{1,2} \d\d:\d\d:\d\d (\S+) /);
+              return m ? good(m[1] === '-' ? '' : m[1]) : '';
+            }
+            if (s.startsWith('field:')) return good(dig(__e, s.slice(6)));
+            if (s.startsWith('json:')) {
+              if (parsed === undefined) { try { parsed = raw.charAt(0) === '{' ? JSON.parse(raw) : null; } catch (err) { parsed = null; } }
+              return parsed ? good(dig(parsed, s.slice(5))) : '';
+            }
+            if (s.startsWith('csv:')) { const n = Number(s.slice(4)); let a = 0; for (let i = 0; i < n; i++) { a = raw.indexOf(',', a) + 1; if (!a) return ''; } const b = raw.indexOf(',', a); return good(b < 0 ? raw.slice(a) : raw.slice(a, b)); }
+            if (s.startsWith('kv:')) {
+              const k = s.slice(3);
+              if (raw.indexOf(k + '=') < 0) return '';
+              const m = raw.match(new RegExp('(?:^|[\\s,;|])' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=(?:"([^"]*)"|([^\\s,;|]+))'));
+              return m ? good(m[1] !== undefined ? m[1] : m[2]) : '';
+            }
+            if (s.startsWith('regex:')) { const m = raw.match(new RegExp(s.slice(6))); return m && m[1] !== undefined ? good(m[1]) : ''; }
+            return '';
+          };
+          const AUTO = ['host', 'field:hostname', 'field:host.name', 'field:hostName', 'field:ComputerName', 'field:Computer',
+            'field:computer_name', 'field:device_name', 'field:dvchost', 'field:devname', 'field:agent.hostname', 'syslog',
+            'kv:devname', 'kv:dvchost', 'ip'];
+          let chain;
+          if (spec === 'auto') chain = AUTO;
+          else {
+            chain = [];
+            for (const p of spec.split(' | ')) {
+              if (chain.length && chain[chain.length - 1].startsWith('regex:')) chain[chain.length - 1] += ' | ' + p;
+              else if (p === 'auto') chain.push(...AUTO);
+              else chain.push(p.trim());
+            }
+          }
+          const sys = raw.charAt(0) === '<' || /^[A-Z][a-z]{2} /.test(raw);
+          for (const s of chain) {
+            if (s === 'none') break;
+            if (s === 'syslog' && !sys) continue;
+            asset = one(s);
+            if (asset) { src = s; break; }
+          }
+        }
+        const norm = S(C.vars.PULSE_ASSET_CASE || 'keep');
+        if (asset && norm !== 'keep') {
+          asset = asset.toLowerCase();
+          if (norm === 'short' && !/^[\d.]+$/.test(asset) && asset.indexOf(':') < 0) asset = asset.split('.')[0];
+        }
+        __e.__pa = asset || S(C.vars.PULSE_SOURCE_LABEL || '(source)');
+        __e.__pas = src;
+  - id: suppress
+    filter: "true"
+    description: 1 event per (input, asset) per 60 s
+    conf:
+      keyExpr: "`${__inputId}|${__pa}`"
+      allow: 1
+      suppressPeriodSec: 60
+      dropEventsMode: true
+      maxCacheSize: 200000
+      cacheIdleTimeoutPeriods: 2
+      numEventsIdleTimeoutTrigger: 10000
+  - id: eval
+    filter: "true"
+    description: Keep the heartbeat count before the sample gate (a 2nd Suppress rewrites suppressCount)
+    conf:
+      add:
+        - name: __n
+          value: "1 + (Number(suppressCount) || 0)"
+      remove:
+        - suppressCount
+  - id: suppress
+    filter: C.vars.PULSE_SAMPLE === true
+    description: "Sample gate: 3 heartbeats per input per 15 min also carry a sample (tag only, nothing dropped)"
+    conf:
+      keyExpr: __inputId
+      allow: 3
+      suppressPeriodSec: 900
+      dropEventsMode: false
+      maxCacheSize: 5000
+      cacheIdleTimeoutPeriods: 2
+      numEventsIdleTimeoutTrigger: 10000
+  - id: code
+    filter: C.vars.PULSE_SAMPLE === true && !suppress
+    description: Sample fields for the Key Advisor (runs ~3 times per input per 15 min)
+    conf:
+      maxNumOfIterations: 5000
+      activeLogSampleRate: 1000
+      useUniqueLogChannel: true
+      code: |
+        const f = {};
+        let n = 0;
+        for (const k of Object.keys(__e)) {
+          if (n >= 40 || k.startsWith('__') || k === '_raw' || k === '_time' || k === 'cribl_breaker' || k === 'cribl_pipe' || k === 'suppress' || k === 'suppressCount') continue;
+          const v = __e[k];
+          f[k] = v !== null && typeof v === 'object' ? JSON.stringify(v).slice(0, 400) : String(v).slice(0, 120);
+          n++;
+        }
+        __e.raw_sample = typeof __e._raw === 'string' ? __e._raw.slice(0, 1500) : '';
+        __e.fields_json = JSON.stringify(f);
+        __e.src_ip = __e.__srcIpPort ? String(__e.__srcIpPort).replace(/^\[/, '').replace(/\]?:\d+$/, '') : '';
+  - id: eval
+    filter: "true"
+    description: Metric-shaped heartbeat (runs only on the kept events)
+    conf:
+      add:
+        - name: _metric
+          value: "'pulse.heartbeat'"
+        - name: _metric_type
+          value: "'gauge'"
+        - name: _value
+          value: __n
+        - name: input
+          value: "__inputId || 'unknown'"
+        - name: asset
+          value: __pa
+        - name: asset_src
+          value: __pas
+        - name: bytes
+          value: "(_raw ? String(_raw).length : 0) * __n"
+        - name: event_lag_s
+          value: "_time ? Math.round(Date.now() / 1000 - _time) : null"
+        - name: _time
+          value: Math.floor(Date.now() / 1000)
+        - name: worker_group
+          value: C.vars.PULSE_WORKER_GROUP
+        - name: worker
+          value: C.os.hostname()
+        - name: sourcetype
+          value: "'pulse:heartbeat'"
+      remove:
+        - "*"
+      keep:
+        - _time
+        - _metric
+        - _metric_type
+        - _value
+        - input
+        - asset
+        - asset_src
+        - bytes
+        - event_lag_s
+        - worker_group
+        - worker
+        - sourcetype
+        - raw_sample
+        - fields_json
+        - src_ip

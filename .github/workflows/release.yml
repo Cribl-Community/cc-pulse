@@ -1,24 +1,39 @@
-# Creates a GitHub Release, with the installable .tgz, whenever a version tag lands here.
-# Tags are pushed by the maintainer's publish workflow; this repo is generated, so don't edit it by hand.
-# Missed one? Actions → Release → Run workflow, with the tag (e.g. v0.2.9).
+# Release: on a vX.Y.Z tag, build the app, publish the Import-from-Git layout, create the GitHub Release
+# with the .tgz, and submit it to the Cribl Marketplace.
+#
+# A standalone copy of the steps in Cribl's shared app-release workflow (criblapps/app-release-workflows,
+# which only criblapps repos can call), plus the Git-install layout that cc-pack-generator publishes.
+#
+# Repo settings it reads:
+#   secret   CRIBL_MARKETPLACE_API_TOKEN  Marketplace personal access token. Unset: build and Release only, with a warning.
+#   variable CRIBL_MARKETPLACE_HOST       Upload host override, e.g. https://packs-staging.cribl.io to rehearse
+#                                         (needs a staging token in the secret). Unset: https://packs.cribl.io.
+#
+# A green run means "submitted", not "live": the app waits for Cribl review in the Marketplace.
+# Missed or failed a release? Actions → Release → Run workflow, with the existing tag.
 name: Release
 
 on:
   push:
-    tags: ['v*']
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing tag to release (e.g. v0.2.9)
+        description: Existing tag to release (e.g. v0.3.0)
         required: true
         type: string
 
 permissions:
   contents: write
 
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
@@ -26,25 +41,104 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
 
-      - name: Package the app
-        run: |
-          mkdir pkg
-          cp -R README.md package.json default static pkg/
-          tar -czf "pulse-${TAG#v}.tgz" -C pkg .
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
 
-      - name: Create the release
+      - run: npm ci
+      # npm test includes browser suites; they find Playwright through `npm root -g`.
+      - name: Install Playwright for the browser tests
+        run: |
+          npm install -g playwright@1.65.0
+          playwright install --with-deps chromium
+      - run: npm run lint
+      - run: npm test
+
+      - name: Build the package
+        run: |
+          VERSION="${TAG#v}"
+          npm run package -- --version "$VERSION"
+          NAME="$(node -p 'require("./package.json").name')"
+          TGZ="build/$NAME-$VERSION.tgz"
+          test -f "$TGZ"
+          echo "NAME=$NAME" >> "$GITHUB_ENV"
+          echo "TGZ=$TGZ" >> "$GITHUB_ENV"
+
+      - name: Publish the layout for Import from Git
+        run: |
+          # Import from Git reads static/ and default/ at the repo root, so the release commit carries them
+          # (main stays source-only). Skip if this tag already has them, e.g. on a re-run.
+          if git ls-files --error-unmatch static/index.html >/dev/null 2>&1; then
+            echo "$TAG already carries the Git-install layout"
+            exit 0
+          fi
+          mkdir "$RUNNER_TEMP/layout"
+          tar -xzf "$TGZ" -C "$RUNNER_TEMP/layout"
+          rm -rf static default
+          cp -R "$RUNNER_TEMP/layout/static" "$RUNNER_TEMP/layout/default" .
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f static default
+          git commit --quiet -m "Release $TAG: app layout for Import from Git"
+          git tag -f -a "$TAG" -m "Pulse $TAG"
+          git push --force origin "refs/tags/$TAG"
+          # Keep the release commit on a branch too: Cribl upgrades a Git-installed app with a plain fetch,
+          # which only brings branches (and tags pointing into them).
+          git push --force origin HEAD:refs/heads/release
+          git tag -f latest
+          git push --force origin refs/tags/latest
+
+      - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists — nothing to do"
-            exit 0
-          fi
-          cat > notes.md <<EOF
+            gh release upload "$TAG" "$TGZ" --clobber
+          else
+            VERSION="${TAG#v}"
+            CHANGELOG="$RUNNER_TEMP/changelog.md"
+            awk -v version="$VERSION" '
+              $0 ~ "^## \\[" version "\\]( |$)" {
+                found = 1
+                next
+              }
+              found && /^## \[/ { exit }
+              found { print }
+            ' CHANGELOG.md > "$CHANGELOG"
+            cat > "$RUNNER_TEMP/notes.md" <<EOF
+          ## Changes
+
+          EOF
+            if [ -s "$CHANGELOG" ]; then
+              cat "$CHANGELOG" >> "$RUNNER_TEMP/notes.md"
+              printf '\n' >> "$RUNNER_TEMP/notes.md"
+            else
+              echo "See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/$TAG/CHANGELOG.md) for the changes in this release." >> "$RUNNER_TEMP/notes.md"
+              printf '\n' >> "$RUNNER_TEMP/notes.md"
+            fi
+            cat >> "$RUNNER_TEMP/notes.md" <<EOF
           ## Install
 
-          - **From Git:** in Cribl, go to **App Platform → Add App → Import from Git** and use \`${{ github.server_url }}/${{ github.repository }}\`.
-          - **From file:** download \`pulse-${TAG#v}.tgz\` below and upload it in **App Platform → Add App**.
+          - **Cribl Marketplace:** in Cribl, open **Apps → Cribl Marketplace** and install **Pulse** (once Cribl has approved this version).
+          - **Import from Git:** **Apps → Add App → Import from Git** with \`${{ github.server_url }}/${{ github.repository }}\` and ref \`latest\`.
+          - **Import from File:** upload \`$(basename "$TGZ")\` (below) in **Apps → Add App → Import from File**.
           EOF
-          gh release create "$TAG" "pulse-${TAG#v}.tgz" \
-            --verify-tag --title "Pulse $TAG" --notes-file notes.md
+            gh release create "$TAG" "$TGZ" --verify-tag --title "Pulse $TAG" \
+              --notes-file "$RUNNER_TEMP/notes.md" --generate-notes
+          fi
+
+      - name: Submit to the Cribl Marketplace
+        env:
+          TOKEN: ${{ secrets.CRIBL_MARKETPLACE_API_TOKEN }}
+          HOST: ${{ vars.CRIBL_MARKETPLACE_HOST || 'https://packs.cribl.io' }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::CRIBL_MARKETPLACE_API_TOKEN is not set; skipping the Marketplace publish"
+            exit 0
+          fi
+          curl --fail-with-body --silent --show-error --location "$HOST/extapi/v1/packs/$NAME" \
+            --header "Authorization: Bearer $TOKEN" \
+            --form "file=@$TGZ"
+          echo
+          echo "Submitted $(basename "$TGZ") to $HOST for Cribl review." | tee -a "$GITHUB_STEP_SUMMARY"

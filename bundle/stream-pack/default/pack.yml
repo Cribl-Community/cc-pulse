@@ -1,0 +1,12 @@
+id: cribl-pulse
+displayName: Pulse - asset heartbeat
+version: 1.3.0
+author: Simon Duchene
+description: |
+  Emits one heartbeat metric (pulse.heartbeat) per (worker_group, input, asset) every 60 s.
+  Installed and managed by the Pulse Cribl App.
+minStreamVersion: 4.12.0
+dataTypes: [metrics]
+useCases: [monitoring]
+technologies: [cribl]
+tags: [pulse]

@@ -1,0 +1,5 @@
+[{"_raw":"2026-11-06T07:26:59Z sender-01 app[42]: heartbeat seq=1 status=ok","host":"sender-01","_time":1793950019,"__inputId":"http:in_http_hostmiss:cribl"},
+ {"_raw":"<13>Nov  6 07:27:00 fw-par-edge-01 sshd: hello","_time":1793950020,"__inputId":"tcp:in_raw_syslog","host":"localhost","__srcIpPort":"10.0.0.9:51544"},
+ {"_raw":"1,2026/11/06 07:27:01,007200001234,TRAFFIC,end,2561,2026/11/06 07:27:01,10.1.1.5,8.8.8.8","_time":1793950021,"__inputId":"datagen:pantraffic","host":"localhost"},
+ {"_raw":"date=2026-11-06 time=07:27:02 devname=\"FGT-PAR-01\" devid=\"FG100F\" type=\"traffic\"","_time":1793950022,"__inputId":"tcp:in_fortigate","__srcIpPort":"[2001:db8::7]:5514"},
+ {"_raw":"{\"msg\":\"hi\"}","_time":1793950023,"__inputId":"http:in_api:cribl"}]

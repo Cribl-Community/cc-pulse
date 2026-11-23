@@ -1,0 +1,9 @@
+pulse_sample:
+  sampleName: pulse_sample.json
+  description: "Five events: host, syslog header behind localhost, PAN CSV, Fortinet key=value with IPv6 source, no identity"
+  tags: pulse
+  isPackOnly: true
+  packId: cribl-pulse
+  size: 456
+  numEvents: 5
+  created: 0

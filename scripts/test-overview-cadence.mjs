@@ -1,0 +1,14 @@
+import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+const src = readFileSync(new URL('../src/pages/Overview.tsx', import.meta.url), 'utf8');
+assert.match(src, /every 5 min/);
+assert.match(src, /'hourly'/);
+assert.match(src, /Roll call as of .*once a day/);
+assert.match(src, /Runs one search over 24 h/);
+assert.match(src, />Check now</);
+assert.match(src, /computeNow\(\)/);
+assert.match(src, /Charts read 24 h of raw data: 3 searches\./);
+assert.match(src, /loadCharts\(\)/);
+assert.equal((src.match(/\{chartsGate/g) ?? []).length, 3);
+assert.doesNotMatch(src.slice(src.indexOf('const isDaily'), src.indexOf('const rollupBehind') + 1200), /#[0-9a-fA-F]{3,6}\b|rgb\(/);
+console.log('overview-cadence ok');

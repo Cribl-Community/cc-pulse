@@ -1,9 +1,39 @@
 {
-  "name": "pulse",
-  "version": "0.2.10",
+  "name": "cc-pulse",
+  "private": true,
+  "version": "0.2.11",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:live": "PULSE_LIVE=1 vite",
+    "build": "bash scripts/build-pack.sh && tsc -b && vite build && apps build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "package": "apps package",
+    "test": "node scripts/test-identity.mjs && node scripts/test-cadence.mjs"
+  },
+  "dependencies": {
+    "@capra/core": "^1.21.0",
+    "@capra/dx-tokens-postcss-plugin": "^0.4.0",
+    "@capra/icons": "^1.11.1",
+    "@capra/theme": "^1.7.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.5"
+  },
+  "devDependencies": {
+    "@cribl/apps": "1.3.0",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  },
   "displayName": "Pulse",
   "description": "Pulse watches every Cribl source per sender: it learns who should be sending, names senders even when the host field is missing, and alerts when one goes silent, arrives late or drops in volume.",
-  "author": "Simon Duchene",
+  "author": "Simon Duchene - sduchene@cribl.io",
   "license": "Apache-2.0",
   "minLogStreamVersion": "4.20.0",
   "cribl": {
