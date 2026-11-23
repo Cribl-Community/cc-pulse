@@ -1,0 +1,1 @@
+import{a as e,r as t}from"./factory-CagAF5Eo.js";import{a as n,cn as r,jt as i,kt as a}from"./index-CKe6qMXu.js";var o=e(t(),1);function s(){let{settings:e,historyLoaded:t,loadCharts:s}=n(),c=a(i(e?.searchLoad),e?.rollCall).historyOnTick,l=!!s&&r({historyOnTick:c,loaded:!!t});(0,o.useEffect)(()=>{l&&s()},[l])}export{s as t};
