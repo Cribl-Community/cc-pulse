@@ -1,13 +1,17 @@
 # Release: on a vX.Y.Z tag, build the app, publish the Import-from-Git layout, create the GitHub Release
-# with the .tgz, and submit it to the Cribl Marketplace.
+# with the .tgz, and submit it to the Cribl Marketplace (Packs Dispensary).
 #
-# A standalone copy of the steps in Cribl's shared app-release workflow (criblapps/app-release-workflows,
-# which only criblapps repos can call), plus the Git-install layout that cc-pack-generator publishes.
+# The same process as cc-pack-generator's release.yml, which Cribl-Community repos share:
+#   vX.Y.Z          production: uploads to the Dispensary with the org's PACKS_API_TOKEN
+#   vX.Y.Z-staging  rehearsal:  uploads to the staging Dispensary with PACKS_API_TOKEN_STAGING, and does not
+#                               move `latest` or `release`, so Git installs are untouched
 #
-# Repo settings it reads:
-#   secret   CRIBL_MARKETPLACE_API_TOKEN  Marketplace personal access token. Unset: build and Release only, with a warning.
-#   variable CRIBL_MARKETPLACE_HOST       Upload host override, e.g. https://packs-staging.cribl.io to rehearse
-#                                         (needs a staging token in the secret). Unset: https://packs.cribl.io.
+# Cribl-Community org settings it reads (the same ones cc-pack-generator uses; nothing to set per repo):
+#   secret   PACKS_API_TOKEN               Marketplace personal access token, production
+#   secret   PACKS_API_TOKEN_STAGING       the same, for staging
+#   variable DISPENSARY_ENDPOINT           https://packs.cribl.io/extapi/v1/packs
+#   variable DISPENSARY_ENDPOINT_STAGING   https://packs-staging.cribl.io/extapi/v1/packs
+# A token that is not set: build and Release only, with a warning.
 #
 # A green run means "submitted", not "live": the app waits for Cribl review in the Marketplace.
 # Missed or failed a release? Actions → Release → Run workflow, with the existing tag.
@@ -15,11 +19,11 @@ name: Release
 
 on:
   push:
-    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+    tags: ['v[0-9]+.[0-9]+.[0-9]+', 'v[0-9]+.[0-9]+.[0-9]+-staging']
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing tag to release (e.g. v0.3.0)
+        description: Existing tag to release (e.g. v0.3.0 or v0.3.0-staging)
         required: true
         type: string
 
@@ -57,11 +61,14 @@ jobs:
 
       - name: Build the package
         run: |
+          # A -staging tag packages the same X.Y.Z as its production tag.
           VERSION="${TAG#v}"
+          VERSION="${VERSION%-staging}"
           npm run package -- --version "$VERSION"
           NAME="$(node -p 'require("./package.json").name')"
           TGZ="build/$NAME-$VERSION.tgz"
           test -f "$TGZ"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "NAME=$NAME" >> "$GITHUB_ENV"
           echo "TGZ=$TGZ" >> "$GITHUB_ENV"
 
@@ -85,9 +92,16 @@ jobs:
           git push --force origin "refs/tags/$TAG"
           # Keep the release commit on a branch too: Cribl upgrades a Git-installed app with a plain fetch,
           # which only brings branches (and tags pointing into them).
-          git push --force origin HEAD:refs/heads/release
-          git tag -f latest
-          git push --force origin refs/tags/latest
+          # Only a production tag moves what Git installs pull: a `-staging` rehearsal must not change
+          # `latest` or `release` for the orgs that installed from Git.
+          case "$TAG" in
+            *-staging) echo "Staging tag: latest and release stay where they are." ;;
+            *)
+              git push --force origin HEAD:refs/heads/release
+              git tag -f latest
+              git push --force origin refs/tags/latest
+              ;;
+          esac
 
       - name: Create the GitHub Release
         env:
@@ -96,7 +110,6 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$TGZ" --clobber
           else
-            VERSION="${TAG#v}"
             CHANGELOG="$RUNNER_TEMP/changelog.md"
             awk -v version="$VERSION" '
               $0 ~ "^## \\[" version "\\]( |$)" {
@@ -124,21 +137,41 @@ jobs:
           - **Import from Git:** **Apps → Add App → Import from Git** with \`${{ github.server_url }}/${{ github.repository }}\` and ref \`latest\`.
           - **Import from File:** upload \`$(basename "$TGZ")\` (below) in **Apps → Add App → Import from File**.
           EOF
-            gh release create "$TAG" "$TGZ" --verify-tag --title "Pulse $TAG" \
+            # A staging rehearsal is a pre-release, so it never becomes the repo's Latest release.
+            FLAGS=""
+            case "$TAG" in *-staging) FLAGS="--prerelease" ;; esac
+            gh release create "$TAG" "$TGZ" --verify-tag --title "Pulse $TAG" $FLAGS \
               --notes-file "$RUNNER_TEMP/notes.md" --generate-notes
           fi
 
-      - name: Submit to the Cribl Marketplace
+      - name: Submit to the Cribl Marketplace (staging)
+        if: endsWith(github.event.inputs.tag || github.ref_name, '-staging')
         env:
-          TOKEN: ${{ secrets.CRIBL_MARKETPLACE_API_TOKEN }}
-          HOST: ${{ vars.CRIBL_MARKETPLACE_HOST || 'https://packs.cribl.io' }}
+          TOKEN: ${{ secrets.PACKS_API_TOKEN_STAGING }}
+          ENDPOINT: ${{ vars.DISPENSARY_ENDPOINT_STAGING || 'https://packs-staging.cribl.io/extapi/v1/packs' }}
         run: |
           if [ -z "$TOKEN" ]; then
-            echo "::warning::CRIBL_MARKETPLACE_API_TOKEN is not set; skipping the Marketplace publish"
+            echo "::warning::PACKS_API_TOKEN_STAGING is not set; skipping the staging Marketplace publish"
             exit 0
           fi
-          curl --fail-with-body --silent --show-error --location "$HOST/extapi/v1/packs/$NAME" \
+          curl --fail-with-body --silent --show-error --location "$ENDPOINT/$NAME" \
             --header "Authorization: Bearer $TOKEN" \
             --form "file=@$TGZ"
           echo
-          echo "Submitted $(basename "$TGZ") to $HOST for Cribl review." | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Submitted $(basename "$TGZ") to $ENDPOINT (staging)." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Submit to the Cribl Marketplace (production)
+        if: ${{ !endsWith(github.event.inputs.tag || github.ref_name, '-staging') }}
+        env:
+          TOKEN: ${{ secrets.PACKS_API_TOKEN }}
+          ENDPOINT: ${{ vars.DISPENSARY_ENDPOINT || 'https://packs.cribl.io/extapi/v1/packs' }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::PACKS_API_TOKEN is not set; skipping the Marketplace publish"
+            exit 0
+          fi
+          curl --fail-with-body --silent --show-error --location "$ENDPOINT/$NAME" \
+            --header "Authorization: Bearer $TOKEN" \
+            --form "file=@$TGZ"
+          echo
+          echo "Submitted $(basename "$TGZ") to $ENDPOINT for Cribl review." | tee -a "$GITHUB_STEP_SUMMARY"

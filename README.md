@@ -379,7 +379,7 @@ Apache License 2.0. See [LICENSE](./LICENSE).
 |---|---|
 | App Name | Pulse |
 | App ID | cc-pulse |
-| Version | 0.2.11 |
+| Version | 0.2.10 |
 | Author | Simon Duchene - sduchene@cribl.io |
 | Support Model | community |
 | Support Label | Community, best effort |
