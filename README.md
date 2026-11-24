@@ -50,7 +50,7 @@ Pulse is a Cribl app for data-completeness monitoring. It learns which assets (h
 ### Install From Git
 1. Log in to Cribl and then click on **Apps → View All**.
 2. Click **Add App → Import from Git**.
-3. Paste `https://github.com/Cribl-Community/cc-pulse` as the repo URL and `latest` for the release tag.
+3. Paste `https://github.com/Cribl-Community/cc-pulse` as the repo URL. Leave the branch as `main`, or enter a release tag such as `latest` to pin the last production release.
 4. Click **Import**.
 
 ### Install From File
@@ -379,7 +379,7 @@ Apache License 2.0. See [LICENSE](./LICENSE).
 |---|---|
 | App Name | Pulse |
 | App ID | cc-pulse |
-| Version | 0.2.10 |
+| Version | 0.2.12 |
 | Author | Simon Duchene - sduchene@cribl.io |
 | Support Model | community |
 | Support Label | Community, best effort |

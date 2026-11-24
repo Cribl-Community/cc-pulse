@@ -1,0 +1,1 @@
+import{gn as e,nr as t,o as n}from"./index-CKe6qMXu.js";var r=n();function i(){let n=t();return(0,r.jsx)(e,{variant:`primary`,onClick:()=>n(`/settings/setup`),children:`Set up Pulse`})}export{i as t};

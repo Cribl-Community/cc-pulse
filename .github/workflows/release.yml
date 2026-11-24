@@ -74,22 +74,23 @@ jobs:
 
       - name: Publish the layout for Import from Git
         run: |
-          # Import from Git reads static/ and default/ at the repo root, so the release commit carries them
-          # (main stays source-only). Skip if this tag already has them, e.g. on a re-run.
+          # Import from Git reads static/ and default/ at the repo root. The publish commit on main normally
+          # carries them already (scripts/publish-public.sh), so main itself installs from Git. Older tags,
+          # or a tag pushed by hand, may lack them: add them on a release commit then.
           if git ls-files --error-unmatch static/index.html >/dev/null 2>&1; then
             echo "$TAG already carries the Git-install layout"
-            exit 0
+          else
+            mkdir "$RUNNER_TEMP/layout"
+            tar -xzf "$TGZ" -C "$RUNNER_TEMP/layout"
+            rm -rf static default
+            cp -R "$RUNNER_TEMP/layout/static" "$RUNNER_TEMP/layout/default" .
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -f static default
+            git commit --quiet -m "Release $TAG: app layout for Import from Git"
+            git tag -f -a "$TAG" -m "Pulse $TAG"
+            git push --force origin "refs/tags/$TAG"
           fi
-          mkdir "$RUNNER_TEMP/layout"
-          tar -xzf "$TGZ" -C "$RUNNER_TEMP/layout"
-          rm -rf static default
-          cp -R "$RUNNER_TEMP/layout/static" "$RUNNER_TEMP/layout/default" .
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f static default
-          git commit --quiet -m "Release $TAG: app layout for Import from Git"
-          git tag -f -a "$TAG" -m "Pulse $TAG"
-          git push --force origin "refs/tags/$TAG"
           # Keep the release commit on a branch too: Cribl upgrades a Git-installed app with a plain fetch,
           # which only brings branches (and tags pointing into them).
           # Only a production tag moves what Git installs pull: a `-staging` rehearsal must not change

@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["react", "typescript", "oxc"],
+  "ignorePatterns": ["static/**", "default/**", "dist/**", "build/**", "backend-build/**"],
   "rules": {
     "react/rules-of-hooks": "error",
     "no-use-before-define": ["error", { "functions": false, "classes": true, "variables": true }],

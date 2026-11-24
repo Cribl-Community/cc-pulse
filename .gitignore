@@ -10,6 +10,5 @@ package-build/
 logs/
 *.log
 
-# The Import-from-Git layout. Written on release commits only, by .github/workflows/release.yml (git add -f).
-/static/
-/default/
+# static/ and default/ (the Import-from-Git layout) are committed on purpose: scripts/publish-public.sh
+# writes them on every release so main installs from Git. Do not edit them by hand.

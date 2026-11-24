@@ -1,0 +1,7 @@
+# Optional external LLM providers (Settings → AI). Keys live encrypted in app KV and are injected here.
+api.anthropic.com:
+  paths: { allowlist: ['/v1/messages'] }
+  headers: { inject: { x-api-key: "kv['secrets/anthropicApiKey']" } }
+api.openai.com:
+  paths: { allowlist: ['/v1/chat/completions'] }
+  headers: { inject: { Authorization: "'Bearer ' + kv['secrets/openaiApiKey']" } }

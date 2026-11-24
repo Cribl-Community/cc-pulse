@@ -72,4 +72,4 @@ A collapsible `Section` stores its state in the app KV store at `ui/collapsed/<s
 
 ## Releases
 
-Maintainers release by pushing a `vX.Y.Z` tag. The Release workflow then builds the app, publishes the Import-from-Git layout (ref `latest`), creates the GitHub Release with the `.tgz`, and submits it to the Cribl Marketplace for review.
+Maintainers release by pushing a `vX.Y.Z` tag. The Release workflow then builds the app, publishes the Import-from-Git layout (`static/` and `default/`, committed on `main` and moved to ref `latest`), creates the GitHub Release with the `.tgz`, and submits it to the Cribl Marketplace for review.
